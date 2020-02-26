@@ -5,11 +5,15 @@ let querystring = require('querystring');
 let handlebars = require("handlebars")
 
 let token = null;
-let logs = [];
+let logs = {
+    apiRequests: [],
+    serverRequests: []
+};
 
 let server = http.createServer(async (request, response) => {
+    let time = (new Date()).getTime();
     switch (request.url) {
-        case '/': {
+        case '/': {       
             response.writeHead(200, {
                 'Content-Type': 'text/html'
             });
@@ -21,6 +25,14 @@ let server = http.createServer(async (request, response) => {
             let output = template(data);
 
             response.end(output);
+            break;
+        }
+        case "/metrics": {
+            response.writeHead(200, {
+                'Content-Type': 'application/json'
+            });
+
+            response.end(JSON.stringify(logs));
             break;
         }
         case "/api/callApis": {
@@ -41,14 +53,26 @@ let server = http.createServer(async (request, response) => {
             break;
         }
     }
+    console.log(response);
+    logs.serverRequests.push({
+        request: {
+            "url": request.url,
+            "headers": request.headers,
+            "method": request.method
+        },
+        response: {
+            "headers": response._header
+        },
+        time: (new Date()).getTime() - time
+    });
 });
 
-server.listen(8080);
+server.listen(8081);
 
 
 function callRandomOrgApi(maxNumber) {
     const randomOrgApiKey = JSON.parse(fs.readFileSync('./app_settings.json')).randomOrgApiKey;
-
+    let time = (new Date()).getTime();
     const data = JSON.stringify({
         "jsonrpc": "2.0",
         "method": "generateIntegers",
@@ -82,6 +106,12 @@ function callRandomOrgApi(maxNumber) {
                 jsonString += chunk;
             });
             res.on('end', () => {
+                logs.apiRequests.push({
+                    type: "randomOrg-number",
+                    request: req,
+                    response: res,
+                    time: (new Date()).getTime() - time
+                });
                 resolve(JSON.parse(jsonString).result.random.data[0]);
             });
         });
@@ -96,6 +126,7 @@ function callRandomOrgApi(maxNumber) {
 }
 
 function getSpotifyToken() {
+    let time = (new Date).getTime();
     const spotifyEncodedAuth = JSON.parse(fs.readFileSync('./app_settings.json')).spotifyEncodedKey;
     const data = querystring.stringify({
         grant_type: "client_credentials"
@@ -123,10 +154,12 @@ function getSpotifyToken() {
             });
 
             res.on('end', () => {
-                logs.push({
+                logs.apiRequests.push({
+                    type: "spotify-token",
                     request: req,
-                    response: res
-                })
+                    response: res,
+                    time: (new Date()).getTime() - time
+                });
                 resolve(JSON.parse(jsonString));
             });
         });
@@ -141,6 +174,7 @@ function getSpotifyToken() {
 }
 
 function getSpotifyPlaylists(token) {
+    let time = (new Date()).getTime();
     const options = {
         hostname: 'api.spotify.com',
         port: 443,
@@ -163,10 +197,12 @@ function getSpotifyPlaylists(token) {
             });
 
             res.on('end', () => {
-                logs.push({
+                logs.apiRequests.push({
+                    type: "spotify-playlists",
                     request: req,
-                    response: res
-                })
+                    response: res,
+                    time: (new Date()).getTime() - time
+                });
                 resolve(JSON.parse(jsonString).playlists.items);
             });
         });
@@ -180,6 +216,7 @@ function getSpotifyPlaylists(token) {
 }
 
 function getSpotifyPlaylistTracks(token, playlistId) {
+    let time = (new Date()).getTime();
     const options = {
         hostname: 'api.spotify.com',
         port: 443,
@@ -202,10 +239,12 @@ function getSpotifyPlaylistTracks(token, playlistId) {
             });
 
             res.on('end', () => {
-                logs.push({
+                logs.apiRequests.push({
+                    type: "spotify-playlist-tracks",
                     request: req,
-                    response: res
-                })
+                    response: res,
+                    time: (new Date()).getTime() - time
+                });
                 resolve(JSON.parse(jsonString));
             });
         });
@@ -220,8 +259,10 @@ function getSpotifyPlaylistTracks(token, playlistId) {
 
 async function getPlaylistInfoAsync() {
     let playlist = {}
-    if (token == null)
+    let time;
+    if (token == null) {
         token = await getSpotifyToken();
+    }
     let playlists = await getSpotifyPlaylists(token.access_token);
     let randomNumber = await callRandomOrgApi(playlists.length - 1);
     playlist.name = playlists[randomNumber].name;
