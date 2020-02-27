@@ -12,6 +12,7 @@ let logs = {
 
 let server = http.createServer(async (request, response) => {
     let time = (new Date()).getTime();
+    let message;
     switch (request.url) {
         case '/': {       
             response.writeHead(200, {
@@ -23,16 +24,40 @@ let server = http.createServer(async (request, response) => {
             let content = fs.readFileSync("./Views/index.hbs");
             let template = handlebars.compile(content.toString());
             let output = template(data);
-
+            message = output
             response.end(output);
             break;
         }
+        // case "/metrics": {
+        //     response.writeHead(200, {
+        //         'Content-Type': 'text/html'
+        //     });
+
+        //     let content = fs.readFileSync("./Views/metrics.hbs");
+        //     let template = handlebars.compile(content.toString());
+        //     let data = {
+        //         rawData: logs,
+        //         stringData: JSON.stringify(logs)
+        //     }
+        //     let output = template(logs)
+        //     message = output;
+        //     response.end(output);
+        //     break;
+        // }
         case "/metrics": {
             response.writeHead(200, {
                 'Content-Type': 'application/json'
             });
-
-            response.end(JSON.stringify(logs));
+            let data = {
+                logs: logs,
+                avgServerResponseTime: avgResponseTime(logs.serverRequests),
+                avgRandomOrgResponseTime: avgResponseTime(logs.apiRequests.filter(x => x.type == "randomOrg-number")),
+                avgSpotifyTokenResponseTime: avgResponseTime(logs.apiRequests.filter(x => x.type == "spotify-token")),
+                avgSpotifyPlaylistsResponseTime: avgResponseTime(logs.apiRequests.filter(x => x.type == "spotify-playlists")),
+                avgSpotifyPlaylistTracksResponseTime: avgResponseTime(logs.apiRequests.filter(x => x.type == "spotify-playlist-tracks"))
+            }
+            message = JSON.stringify(data)
+            response.end(message);
             break;
         }
         case "/api/callApis": {
@@ -41,19 +66,20 @@ let server = http.createServer(async (request, response) => {
             });
 
             let data = await getPlaylistInfoAsync();
-            response.end(JSON.stringify(data));
+            message = JSON.stringify(data);
+            response.end(message);
             break;
         }
         default: {
             response.writeHead(200, {
                 'Content-Type': 'text/html'
             });
-
+            message = "404";
             response.end("404");
             break;
         }
     }
-    console.log(response);
+
     logs.serverRequests.push({
         request: {
             "url": request.url,
@@ -61,7 +87,9 @@ let server = http.createServer(async (request, response) => {
             "method": request.method
         },
         response: {
-            "headers": response._header
+            "statusCode": response.statusCode,
+            "statusMessage": response.statusMessage,
+            "content": message
         },
         time: (new Date()).getTime() - time
     });
@@ -108,8 +136,17 @@ function callRandomOrgApi(maxNumber) {
             res.on('end', () => {
                 logs.apiRequests.push({
                     type: "randomOrg-number",
-                    request: req,
-                    response: res,
+                    request: {
+                        "server": req.hostname,
+                        "path": req.path,
+                        "method": req.method,
+                        "header": req.headers
+                    },
+                    response: {
+                        "statusCode": res.statusCode,
+                        "statusMessage": res.statusMessage,
+                        "data": JSON.parse(jsonString)
+                    },
                     time: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString).result.random.data[0]);
@@ -156,8 +193,17 @@ function getSpotifyToken() {
             res.on('end', () => {
                 logs.apiRequests.push({
                     type: "spotify-token",
-                    request: req,
-                    response: res,
+                    request: {
+                        "server": req.hostname,
+                        "path": req.path,
+                        "method": req.method,
+                        "header": req.headers
+                    },
+                    response: {
+                        "statusCode": res.statusCode,
+                        "statusMessage": res.statusMessage,
+                        "data": JSON.parse(jsonString)
+                    },
                     time: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString));
@@ -199,8 +245,17 @@ function getSpotifyPlaylists(token) {
             res.on('end', () => {
                 logs.apiRequests.push({
                     type: "spotify-playlists",
-                    request: req,
-                    response: res,
+                    request: {
+                        "server": req.hostname,
+                        "path": req.path,
+                        "method": req.method,
+                        "header": req.headers
+                    },
+                    response: {
+                        "statusCode": res.statusCode,
+                        "statusMessage": res.statusMessage,
+                        "data": JSON.parse(jsonString)
+                    },
                     time: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString).playlists.items);
@@ -241,8 +296,17 @@ function getSpotifyPlaylistTracks(token, playlistId) {
             res.on('end', () => {
                 logs.apiRequests.push({
                     type: "spotify-playlist-tracks",
-                    request: req,
-                    response: res,
+                    request: {
+                        "server": req.hostname,
+                        "path": req.path,
+                        "method": req.method,
+                        "header": req.headers
+                    },
+                    response: {
+                        "statusCode": res.statusCode,
+                        "statusMessage": res.statusMessage,
+                        "data": JSON.parse(jsonString)
+                    },
                     time: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString));
@@ -277,4 +341,8 @@ function getSongArtists(track) {
         artists += artist.name + ', ';
     }
     return artists.slice(0, artists.length - 2)
+}
+
+function avgResponseTime(requests) {
+    return requests.map(x => x.time).reduce((a, b) => a + b, 0) / requests.length;
 }
