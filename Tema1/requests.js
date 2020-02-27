@@ -9,7 +9,7 @@ function send50Requests(iteration, totalNrOfRequests) {
     }
     
     for (let i = 0; i < 50; i++)
-        http.get("http://localhost:5000/WeatherForecast", res => {
+        http.get("http://localhost:8081/api/callApis", res => {
             const { statusCode } = res;
             let time = (new Date()).getTime();
 
@@ -33,7 +33,7 @@ function send50Requests(iteration, totalNrOfRequests) {
             console.error(`Got error: ${e.message}`);
         });
     
-    setTimeout(send50Requests, 1500, iteration+1, totalNrOfRequests);
+    setTimeout(send50Requests, 3000, iteration+1, totalNrOfRequests);
 }
 
-send50Requests(0, 500);
+send50Requests(0, 100);

@@ -91,7 +91,8 @@ let server = http.createServer(async (request, response) => {
             "statusMessage": response.statusMessage,
             "content": message
         },
-        time: (new Date()).getTime() - time
+        dateTime: new Date(),
+        responseTime: (new Date()).getTime() - time
     });
 });
 
@@ -134,6 +135,7 @@ function callRandomOrgApi(maxNumber) {
                 jsonString += chunk;
             });
             res.on('end', () => {
+                // console.log(jsonString)
                 logs.apiRequests.push({
                     type: "randomOrg-number",
                     request: {
@@ -147,7 +149,7 @@ function callRandomOrgApi(maxNumber) {
                         "statusMessage": res.statusMessage,
                         "data": JSON.parse(jsonString)
                     },
-                    time: (new Date()).getTime() - time
+                    responseTime: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString).result.random.data[0]);
             });
@@ -204,7 +206,7 @@ function getSpotifyToken() {
                         "statusMessage": res.statusMessage,
                         "data": JSON.parse(jsonString)
                     },
-                    time: (new Date()).getTime() - time
+                    responseTime: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString));
             });
@@ -256,7 +258,7 @@ function getSpotifyPlaylists(token) {
                         "statusMessage": res.statusMessage,
                         "data": JSON.parse(jsonString)
                     },
-                    time: (new Date()).getTime() - time
+                    responseTime: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString).playlists.items);
             });
@@ -307,7 +309,7 @@ function getSpotifyPlaylistTracks(token, playlistId) {
                         "statusMessage": res.statusMessage,
                         "data": JSON.parse(jsonString)
                     },
-                    time: (new Date()).getTime() - time
+                    responseTime: (new Date()).getTime() - time
                 });
                 resolve(JSON.parse(jsonString));
             });
@@ -323,7 +325,6 @@ function getSpotifyPlaylistTracks(token, playlistId) {
 
 async function getPlaylistInfoAsync() {
     let playlist = {}
-    let time;
     if (token == null) {
         token = await getSpotifyToken();
     }
@@ -344,5 +345,6 @@ function getSongArtists(track) {
 }
 
 function avgResponseTime(requests) {
-    return requests.map(x => x.time).reduce((a, b) => a + b, 0) / requests.length;
+    let avgResponseTime = requests.map(x => x.responseTime).reduce((a, b) => a + b, 0) / requests.length;
+    return avgResponseTime;
 }
