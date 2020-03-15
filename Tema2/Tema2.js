@@ -19,14 +19,16 @@ City.init({
 }, {
     sequelize,
     modelName: 'city',
-    tableName: 'Cities'
+    tableName: 'Cities',
+    timestamps: false
 });
 
 class Location extends Model {}
 Location.init({
     id: {
         type: Sequelize.INTEGER,
-        primaryKey: true
+        primaryKey: true,
+        autoIncrement: true
     },
     Name: {
         type: Sequelize.STRING,
@@ -35,20 +37,30 @@ Location.init({
     GoogleMapsUrl: {
         type: Sequelize.STRING,
         allowNull: true
+    },
+    cityId: {
+        type: Sequelize.INTEGER,
+        references: {
+            model: 'city',
+            key: "id"
+        }
     }
 }, {
     sequelize,
     modelName: 'location',
-    tableName: 'locations'
-})
+    tableName: 'Locations',
+    timestamps: false
+});
 
+City.hasMany(Location)
+Location.belongsTo(City)
 
 
 
 let server = http.createServer(async (req, res) => {
 
     let urlBits = req.url.split('/')
-    console.log(urlBits)
+    // console.log(urlBits)
     switch (urlBits[1]) {
         case 'cities': {
             switch (req.method) {
@@ -64,6 +76,7 @@ let server = http.createServer(async (req, res) => {
                             res.writeHead(200, {
                                 'Content-Type': 'application/json'
                             });
+                            // console.log(cities)
                             res.end(JSON.stringify(cities));
                         } catch (e) {
                             res.writeHead(500);
@@ -82,7 +95,10 @@ let server = http.createServer(async (req, res) => {
                             let city = await City.findOne({
                                 where: {
                                     id: cityId
-                                }
+                                },
+                                include: [{
+                                    model: Location
+                                }]
                             }).catch(e => {
                                 res.writeHead(500);
                                 res.end();
@@ -121,15 +137,21 @@ let server = http.createServer(async (req, res) => {
                         }
 
                         let newCity = City.build({
-                            Name: body.name
+                            Name: body.name,
+                            locations: null
                         });
-
-                        newCity.save().then(() => {
-                            res.writeHead(201, {
-                                Location: `${req.headers.host}/cities/${newCity.id}`
+                        try {
+                            newCity.save().then(() => {
+                                res.writeHead(201, {
+                                    Location: `${req.headers.host}/cities/${newCity.id}`
+                                });
+                                res.end();
                             });
+                        } catch (e) {
+                            res.writeHead(500);
                             res.end();
-                        });
+                            console.error(e)
+                        }
                     });
                     break;
                 }
@@ -171,13 +193,14 @@ let server = http.createServer(async (req, res) => {
                             console.error(e);
                         });
 
-                        if (city == null) {
+                        if (cityToBeUpdated == null) {
                             res.writeHead(404);
                             res.end();
                         } else {
-                            cityToBeUpdated.name = body.name;
+                            cityToBeUpdated.id = cityId
+                            cityToBeUpdated.Name = body.name;
                             cityToBeUpdated.save().then(() => {
-                                res.writeHead(204);
+                                res.writeHead(200);
                                 res.end();
                             });
                         }
@@ -186,9 +209,12 @@ let server = http.createServer(async (req, res) => {
                 }
                 case "DELETE": {
                     if (urlBits[2] == null) {
-                        console.log("no id");
-                        res.writeHead(400);
-                        res.end()
+                        City.destroy({
+                            where: {}
+                        }).then(() => {
+                            res.writeHead(200);
+                            res.end();
+                        });
                         return;
                     }
 
@@ -235,42 +261,214 @@ let server = http.createServer(async (req, res) => {
                 }
                 default: {
                     res.writeHead(405);
-                    res.end()
+                    res.end();
+                    break;
                 }
-                break;
             }
+            break;
         }
         case 'locations': {
             switch (req.method) {
                 case "GET": {
-                    if (urlBits[2] != null) {
-                        let id = Number.parseInt(urlBits[2]);
-                        console.log(id);
-                        // let city = data.filter(city => city.locations.find(location => location.id == id));
-                        // if (city == null) {
-                        //     res.writeHead(404);
-                        //     res.end();
-                        // } else {
-                        //     res.writeHead(200, {
-                        //         'Content-Type': 'application/json'
-                        //     });
-                        //     res.end(JSON.stringify(city.locations))
-                        // }
+                    if (urlBits[2] == null) { //collection get
+                        try {
+                            let locations = await Location.findAll().catch(e => {
+                                res.writeHead(500);
+                                res.end();
+                                console.error(e);
+                            });
+
+                            res.writeHead(200, {
+                                'Content-Type': 'application/json'
+                            });
+                            res.end(JSON.stringify(locations));
+                        } catch (e) {
+                            res.writeHead(500);
+                            res.end();
+                            console.error(e);
+                        }
                     } else {
-                        res.writeHead(200, {
-                            'Content-Type': 'application/json'
-                        });
-                        let locations = []
-                        // for (let city of data) {
-                        //     locations.push(...city.locations)
-                        // }
-                        res.end(JSON.stringify(locations));
+                        try {
+                            let locationId = Number.parseInt(urlBits[2]);
+                            if (isNaN(locationId)) {
+                                res.writeHead(400);
+                                res.end();
+                                return;
+                            }
+
+                            let location = await Location.findOne({
+                                where: {
+                                    id: locationId
+                                }
+                            }).catch(e => {
+                                res.writeHead(500);
+                                res.end();
+                                console.error(e);
+                            });
+
+                            if (location == null) {
+                                res.writeHead(404);
+                                res.end();
+                            } else {
+                                res.writeHead(200, {
+                                    'Content-Type': 'application/json'
+                                });
+                                res.end(JSON.stringify(location));
+                            }
+                        } catch (e) {
+                            res.writeHead(500);
+                            res.end();
+                            console.error(e);
+                        }
                     }
+                    break;
+                }
+                case "POST": {
+                    let body = "";
+
+                    req.on('data', chunk => body += chunk);
+                    req.on('end', () => {
+                        body = JSON.parse(body);
+
+                        if (body.name == null) {
+                            console.log("name missing")
+                            res.writeHead(400);
+                            res.end();
+                            return;
+                        }
+
+                        console.log(body);
+
+                        let newLocation = Location.build({
+                            Name: body.name,
+                            GoogleMapsUrl: body.googleMapsLink,
+                            cityId: body.cityId
+                        });
+
+                        newLocation.save().then(() => {
+                            res.writeHead(201, {
+                                Location: `${req.headers.host}/locations/${newLocation.id}`
+                            });
+                            res.end();
+                        });
+                    });
+                    break;
+                }
+                case "PUT": {
+                    if (urlBits[2] == null) {
+                        console.log("no id");
+                        res.writeHead(405);
+                        res.end()
+                        return;
+                    }
+
+                    let locationId = Number.parseInt(urlBits[2]);
+                    if (isNaN(locationId)) {
+                        res.writeHead(400);
+                        res.end();
+                        return;
+                    }
+
+                    let body = "";
+
+                    req.on('data', chunk => body += chunk);
+                    req.on('end', async () => {
+                        body = JSON.parse(body);
+
+                        if (body.name == null) {
+                            console.log("name missing");
+                            req.writeHead(400);
+                            req.end();
+                            return;
+                        }
+
+                        let locationToBeUpdated = await Location.findOne({
+                            where: {
+                                id: locationId
+                            }
+                        }).catch(e => {
+                            res.writeHead(500);
+                            res.end();
+                            console.error(e);
+                        });
+
+                        if (locationToBeUpdated == null) {
+                            res.writeHead(404);
+                            res.end();
+                        } else {
+                            locationToBeUpdated.id = locationId;
+                            locationToBeUpdated.Name = body.name;
+                            locationToBeUpdated.GoogleMapsUrl = body.googleMapsUrl;
+                            locationToBeUpdated.save().then(() => {
+                                res.writeHead(200);
+                                res.end();
+                            });
+                        }
+                    });
+                    break;
+                }
+                case "DELETE": {
+                    if (urlBits[2] == null) {
+                        Location.destroy({
+                            where: {}
+                        }).then(() => {
+                            res.writeHead(200);
+                            res.end();
+                        });
+                        return;
+                    }
+
+                    let locationId = Number.parseInt(urlBits[2]);
+                    if (isNaN(locationId)) {
+                        res.writeHead(400);
+                        res.end();
+                        return;
+                    }
+
+                    let locationToBeDeleted = await Location.findOne({
+                        where: {
+                            id: locationId
+                        }
+                    }).catch(e => {
+                        res.writeHead(500);
+                        res.end();
+                        console.error(e);
+                    });
+
+                    if (locationToBeDeleted == null) {
+                        res.writeHead(404);
+                        res.end();
+                    } else {
+                        // console.log(locationToBeDeleted)
+                        await Location.destroy({
+                            where: {
+                                id: locationId
+                            }
+                        }).then(
+                            () => {
+                                res.writeHead(200);
+                                res.end();
+                            }
+                        ).catch(
+                            (e) => {
+                                console.error(e)
+                                res.writeHead(500);
+                                res.end();
+                            }
+                        );
+                    }
+                    break;
                 }
                 default: {
                     res.writeHead(405);
                 }
             }
+            break;
+        }
+        default: {
+            res.writeHead(400);
+            res.end();
+            break;
         }
     }
 })
